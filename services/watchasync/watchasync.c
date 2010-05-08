@@ -30,6 +30,9 @@
  */
 
 #include <avr/pgmspace.h>
+#include <avr/io.h>
+#include <avr/interrupt.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,6 +45,7 @@
 #include "core/portio/portio.h"
 #include "protocols/ecmd/sender/ecmd_sender_net.h"
 #include "watchasync.h"
+
 
 #ifdef CONF_WATCHASYNC_INCLUDE_TIMESTAMP
 #include "services/clock/clock.h"
@@ -77,33 +81,21 @@ static uint8_t wa_buffer_right = 0; 	// last position set
 static uint8_t wa_portstate = 0; 		// Last portstate saved
 static uint8_t wa_sendstate = 0; 		// 0: Idle, 1: Message being sent, 2: Sending message failed
 
-// Handle Pinchange Interrupt on PortC
-ISR(PCINT2_vect)
+// Handle Pinchange Interrupt on INT0
+ISR(INT0_vect) 
 {
-  uint8_t portcompstate = (PINC ^ wa_portstate); //  compare actual state of PortC with last saved state
-  uint8_t pin;	// loop variable for for-loop
+  //cli();
   uint8_t tempright;  // temporary pointer for detecting full buffer
-  while (portcompstate)  // repeat comparison as long as there are changes to the PortC
+  tempright = ((wa_buffer_right + 1) % CONF_WATCHASYNC_BUFFERSIZE); // calculate next position in ringbuffer
+  if (tempright != wa_buffer_left) // if ringbuffer not full
   {
-    for (pin = 0; pin < 8; pin ++)  // iterate through pins
-    {
-      if (portcompstate & wa_portstate & (1 << pin)) // bit changed from 1 to 0
-      {
-        tempright = ((wa_buffer_right + 1) % CONF_WATCHASYNC_BUFFERSIZE);  // calculate next position in ringbuffer
-	if (tempright != wa_buffer_left)  // if ringbuffer not full
-	{
-	  wa_buffer_right = tempright;  // select next space in ringbuffer
-	  wa_buffer[wa_buffer_right].pin = pin;  // set pin in ringbuffer
+    wa_buffer_right = tempright; // select next space in ringbuffer
+    wa_buffer[wa_buffer_right].pin = 2; // set pin in ringbuffer
 #ifdef CONF_WATCHASYNC_INCLUDE_TIMESTAMP
-          wa_buffer[wa_buffer_right].timestamp = clock_get_time();  // add timestamp in ringbuffer
+    wa_buffer[wa_buffer_right].timestamp = clock_get_time(); // add timestamp in ringbuffer
 #endif
-//	} else {  // ringbuffer is full... discard event
-//	  WATCHASYNC_DEBUG ("Buffer full, discarding message!\n");
-	}
-      }
-    }
-    wa_portstate ^= portcompstate;  // incorporate changes processed in current state
-    portcompstate = (PINC ^ wa_portstate);  // check for new changes on PortC
+  // } else { // ringbuffer is full... discard event
+  // WATCHASYNC_DEBUG ("Buffer full, discarding message!\n");
   }
 }
 
@@ -200,12 +192,13 @@ void sendmessage(void) // Send event in ringbuffer indicated by left pointer
 
 void watchasync_init(void)  // Initilize Poirts and Interrupts
 {
-  PORTC = (1<<PC7)|(1<<PC6)|(1<<PC5)|(1<<PC4)|(1<<PC3)|(1<<PC2)|(1<<PC1)|(1<<PC0);  // Enable Pull-up on PortC
-  DDRC = 0; 			// PortC Input
-  wa_portstate = PINC; 		// save current state
-  PCMSK2 = (1<<PCINT23)|(1<<PCINT22)|(1<<PCINT21)|(1<<PCINT20)|(1<<PCINT19)|(1<<PCINT18)|(1<<PCINT17)|(1<<PCINT16);  // Enable Pinchange Interrupt on PortC
-  PCICR |= 1<<PCIE2;		// Enable Pinchange Interrupt on PortC
-//  SREG |= 1<<I;			//Enable Interrupts (will hopefully be done somewhere else)
+  PORTD = 0;  // Enable Pull-up on PortD
+  DDRD &= ~(1<<PD2);    // PortD2 Input
+  // interrupt on INT0 pin falling edge
+  MCUCR |= (1<<ISC01);
+  MCUCR &= ~(1<<ISC00);
+  // turn on interrupt INT0
+  GICR |= (1<<INT0);
 }
 
 void watchasync_mainloop(void)  // Mainloop routine poll ringsbuffer
