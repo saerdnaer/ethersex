@@ -31,6 +31,18 @@ app_sample_init(void);
 int16_t
 app_sample_periodic(void);
 
+int16_t
+app_sample_process(void);
+
+void
+clear_display(void);
+
+void
+set_display_via_table(uint8_t a, uint8_t b, uint8_t c);
+
+void
+set_display(uint8_t a, uint8_t b, uint8_t c);
+
 
 #include "config.h"
 #ifdef DEBUG_APP_SAMPLE

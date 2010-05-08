@@ -43,7 +43,7 @@ int16_t parse_cmd_app_sample_init(char *cmd, char *output, uint16_t len)
 
 int16_t parse_cmd_app_sample_periodic(char *cmd, char *output, uint16_t len) 
 {
-  return app_sample_periodic();
+  return ECMD_FINAL_OK; //app_sample_periodic();
 }
 
 /*
